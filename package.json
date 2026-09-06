@@ -2,7 +2,7 @@
   "name": "configeditor",
   "displayName": "ConfigEditor",
   "description": "Edit multiple environment config files (.json, .yaml, .ini, .env) side-by-side in a single table view.",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "publisher": "LockeSoftware",
   "license": "MIT",
   "repository": {
