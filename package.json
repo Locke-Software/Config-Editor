@@ -17,7 +17,22 @@
     "vscode": "^1.136.0"
   },
   "categories": [
+    "Visualization",
+    "Formatters",
     "Other"
+  ],
+  "keywords": [
+    "config",
+    "configuration",
+    "env",
+    "dotenv",
+    "yaml",
+    "ini",
+    "json",
+    "properties",
+    "environment variables",
+    "diff",
+    "compare"
   ],
   "activationEvents": [],
   "main": "./dist/extension.js",
