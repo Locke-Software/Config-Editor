@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src {{cspSource}}; style-src {{cspSource}}; script-src 'nonce-{{nonce}}';">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<link href="{{styleUri}}" rel="stylesheet">
+	<title>Config Editor</title>
+</head>
+<body>
+	<div id="toolbar">
+		<button id="save-all">Save All</button>
+		<button id="add-file">+ Add Environment</button>
+	</div>
+	<div id="table-container"></div>
+
+	<!-- Templates below define the table's markup. main.js clones them and fills
+	     in data/handlers - edit these to change structure, media/main.css for style. -->
+
+	<template id="tpl-empty-state">
+		<p class="empty">No environment files open yet. Click "+ Add Environment" to get started.</p>
+	</template>
+
+	<template id="tpl-key-header">
+		<th class="key-column">Config Item</th>
+	</template>
+
+	<template id="tpl-file-header">
+		<th>
+			<div class="cell-content">
+				<span class="file-name-group">
+					<span class="file-name"></span>
+					<span class="dirty-dot"> &#9679;</span>
+				</span>
+				<div class="header-actions">
+					<button class="save-btn">Save</button>
+					<button class="remove-btn secondary">Remove</button>
+				</div>
+			</div>
+		</th>
+	</template>
+
+	<template id="tpl-section-row">
+		<tr class="section-row">
+			<td class="key-column section">
+				<div class="cell-content">
+					<span class="section-label">
+						<span class="toggle"></span>
+						<span class="section-name"></span>
+					</span>
+					<button class="remove-row secondary" title="Remove this section and everything in it">&#10007;</button>
+				</div>
+			</td>
+		</tr>
+	</template>
+
+	<template id="tpl-leaf-row">
+		<tr>
+			<td class="key-column">
+				<div class="cell-content">
+					<span class="key-name"></span>
+					<button class="remove-row secondary" title="Remove this config item">&#10007;</button>
+				</div>
+			</td>
+		</tr>
+	</template>
+
+	<template id="tpl-leaf-cell">
+		<td><input type="text"></td>
+	</template>
+
+	<template id="tpl-add-row-form">
+		<form id="add-row-form">
+			<input type="text" placeholder="New config item (use &quot;section.name&quot; to nest)">
+			<button type="submit">+ Add Item</button>
+		</form>
+	</template>
+
+	<script nonce="{{nonce}}" src="{{scriptUri}}"></script>
+</body>
+</html>

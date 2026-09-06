@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import * as fs from 'fs';
 import * as path from 'path';
 import { ConfigEntries, ConfigFormat, detectFormat, parseConfig, serializeConfig } from './configParser';
 
@@ -7,6 +8,14 @@ interface FileState {
 	format: ConfigFormat;
 	entries: ConfigEntries;
 	dirty: boolean;
+}
+
+/** A node in the display tree built from dot-separated keys (e.g. "api.url" -> section "api" > leaf "url"). */
+interface UiTreeNode {
+	path: string;
+	name: string;
+	children: UiTreeNode[];
+	values?: Record<string, string>;
 }
 
 const OPEN_DIALOG_FILTERS: Record<string, string[]> = {
@@ -109,6 +118,9 @@ export class ConfigEditorPanel {
 			case 'removeKey':
 				this.handleRemoveKey(message.key);
 				break;
+			case 'removeSection':
+				this.handleRemoveSection(message.path);
+				break;
 			case 'addFile':
 				await this.handleAddFile();
 				break;
@@ -152,6 +164,25 @@ export class ConfigEditorPanel {
 		for (const file of this.files) {
 			if (file.entries.delete(key)) {
 				file.dirty = true;
+			}
+		}
+		this.updateTitle();
+		this.render();
+	}
+
+	/** Removes a section and every leaf key nested under it (path itself or "path.*"). */
+	private handleRemoveSection(sectionPath: string): void {
+		const prefix = `${sectionPath}.`;
+		const toRemove = this.keyOrder.filter(key => key === sectionPath || key.startsWith(prefix));
+		if (toRemove.length === 0) {
+			return;
+		}
+		this.keyOrder = this.keyOrder.filter(key => !toRemove.includes(key));
+		for (const file of this.files) {
+			for (const key of toRemove) {
+				if (file.entries.delete(key)) {
+					file.dirty = true;
+				}
 			}
 		}
 		this.updateTitle();
@@ -213,37 +244,54 @@ export class ConfigEditorPanel {
 				name: path.basename(f.uri.fsPath),
 				dirty: f.dirty
 			})),
-			rows: this.keyOrder.map(key => ({
-				key,
-				values: Object.fromEntries(this.files.map(f => [f.uri.toString(), f.entries.get(key) ?? '']))
-			}))
+			tree: this.buildTree()
 		};
 		void this.panel.webview.postMessage({ type: 'init', state });
+	}
+
+	/** Groups dot-separated keys into a nested tree so parent segments render as sections. */
+	private buildTree(): UiTreeNode[] {
+		const roots: UiTreeNode[] = [];
+		const nodeByPath = new Map<string, UiTreeNode>();
+
+		for (const key of this.keyOrder) {
+			const segments = key.split('.');
+			let currentPath = '';
+			let siblings = roots;
+			for (const segment of segments) {
+				currentPath = currentPath ? `${currentPath}.${segment}` : segment;
+				let node = nodeByPath.get(currentPath);
+				if (!node) {
+					node = { path: currentPath, name: segment, children: [] };
+					nodeByPath.set(currentPath, node);
+					siblings.push(node);
+				}
+				siblings = node.children;
+			}
+		}
+
+		// A node is a leaf (has an editable value per file) only if it has no children.
+		for (const [nodePath, node] of nodeByPath) {
+			if (node.children.length === 0) {
+				node.values = Object.fromEntries(this.files.map(f => [f.uri.toString(), f.entries.get(nodePath) ?? '']));
+			}
+		}
+
+		return roots;
 	}
 
 	private getHtml(): string {
 		const webview = this.panel.webview;
 		const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, 'media', 'main.js'));
 		const styleUri = webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, 'media', 'main.css'));
+		const htmlPath = vscode.Uri.joinPath(this.extensionUri, 'media', 'main.html').fsPath;
 		const nonce = getNonce();
-		return `<!DOCTYPE html>
-<html lang="en">
-<head>
-	<meta charset="UTF-8">
-	<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${webview.cspSource}; style-src ${webview.cspSource}; script-src 'nonce-${nonce}';">
-	<meta name="viewport" content="width=device-width, initial-scale=1.0">
-	<link href="${styleUri}" rel="stylesheet">
-	<title>Config Editor</title>
-</head>
-<body>
-	<div id="toolbar">
-		<button id="save-all">Save All</button>
-		<button id="add-file">+ Add Environment</button>
-	</div>
-	<div id="table-container"></div>
-	<script nonce="${nonce}" src="${scriptUri}"></script>
-</body>
-</html>`;
+
+		return fs.readFileSync(htmlPath, 'utf8')
+			.replace(/{{cspSource}}/g, webview.cspSource)
+			.replace(/{{nonce}}/g, nonce)
+			.replace('{{styleUri}}', styleUri.toString())
+			.replace('{{scriptUri}}', scriptUri.toString());
 	}
 }
 

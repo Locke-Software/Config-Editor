@@ -5,8 +5,9 @@
 	const saveAllButton = document.getElementById('save-all');
 	const addFileButton = document.getElementById('add-file');
 
-	/** @type {{ files: {uri:string,name:string,dirty:boolean}[], rows: {key:string, values: Record<string,string>}[] }} */
-	let state = { files: [], rows: [] };
+	/** @type {{ files: {uri:string,name:string,dirty:boolean}[], tree: {path:string,name:string,children:any[],values?:Record<string,string>}[] }} */
+	let state = { files: [], tree: [] };
+	const collapsedPaths = new Set(vscode.getState()?.collapsed ?? []);
 
 	window.addEventListener('message', event => {
 		const message = event.data;
@@ -24,19 +25,25 @@
 	saveAllButton.addEventListener('click', () => vscode.postMessage({ type: 'saveAll' }));
 	addFileButton.addEventListener('click', () => vscode.postMessage({ type: 'addFile' }));
 
+	/** Clones a <template id="..."> from main.html; its markup drives the table's structure. */
+	function cloneTemplate(id) {
+		return document.getElementById(id).content.cloneNode(true);
+	}
+
 	function render() {
 		const anyDirty = state.files.some(f => f.dirty);
 		saveAllButton.disabled = !anyDirty;
 
+		container.innerHTML = '';
+
 		if (state.files.length === 0) {
-			container.innerHTML = '<p class="empty">No environment files open yet. Click "+ Add Environment" to get started.</p>';
+			container.appendChild(cloneTemplate('tpl-empty-state'));
 			return;
 		}
 
 		const table = document.createElement('table');
 		table.appendChild(buildHeader());
 		table.appendChild(buildBody());
-		container.innerHTML = '';
 		container.appendChild(table);
 		container.appendChild(buildAddRowForm());
 	}
@@ -45,43 +52,24 @@
 		const thead = document.createElement('thead');
 		const tr = document.createElement('tr');
 
-		const keyTh = document.createElement('th');
-		keyTh.className = 'key-column';
-		keyTh.textContent = 'Config Item';
-		tr.appendChild(keyTh);
+		tr.appendChild(cloneTemplate('tpl-key-header').firstElementChild);
 
 		for (const file of state.files) {
-			const th = document.createElement('th');
+			const th = cloneTemplate('tpl-file-header').firstElementChild;
 			th.dataset.uri = file.uri;
 
-			const title = document.createElement('span');
-			title.className = 'file-name';
-			title.textContent = file.name;
-			title.title = file.uri;
-			th.appendChild(title);
+			const name = th.querySelector('.file-name');
+			name.textContent = file.name;
+			name.title = file.uri;
 
-			const dirtyDot = document.createElement('span');
-			dirtyDot.className = 'dirty-dot';
-			dirtyDot.textContent = ' \u25CF';
-			dirtyDot.style.visibility = file.dirty ? 'visible' : 'hidden';
-			th.appendChild(dirtyDot);
+			th.querySelector('.dirty-dot').style.visibility = file.dirty ? 'visible' : 'hidden';
 
-			const actions = document.createElement('div');
-			actions.className = 'header-actions';
-
-			const saveBtn = document.createElement('button');
-			saveBtn.textContent = 'Save';
+			const saveBtn = th.querySelector('.save-btn');
 			saveBtn.disabled = !file.dirty;
 			saveBtn.addEventListener('click', () => vscode.postMessage({ type: 'save', uri: file.uri }));
-			actions.appendChild(saveBtn);
 
-			const removeBtn = document.createElement('button');
-			removeBtn.textContent = 'Remove';
-			removeBtn.className = 'secondary';
-			removeBtn.addEventListener('click', () => vscode.postMessage({ type: 'removeFile', uri: file.uri }));
-			actions.appendChild(removeBtn);
+			th.querySelector('.remove-btn').addEventListener('click', () => vscode.postMessage({ type: 'removeFile', uri: file.uri }));
 
-			th.appendChild(actions);
 			tr.appendChild(th);
 		}
 
@@ -91,54 +79,78 @@
 
 	function buildBody() {
 		const tbody = document.createElement('tbody');
-		for (const row of state.rows) {
-			const tr = document.createElement('tr');
-
-			const keyTd = document.createElement('td');
-			keyTd.className = 'key-column';
-			const keyLabel = document.createElement('span');
-			keyLabel.textContent = row.key;
-			keyTd.appendChild(keyLabel);
-			const removeRowBtn = document.createElement('button');
-			removeRowBtn.className = 'remove-row secondary';
-			removeRowBtn.textContent = '\u2715';
-			removeRowBtn.title = 'Remove this config item';
-			removeRowBtn.addEventListener('click', () => vscode.postMessage({ type: 'removeKey', key: row.key }));
-			keyTd.appendChild(removeRowBtn);
-			tr.appendChild(keyTd);
-
-			for (const file of state.files) {
-				const td = document.createElement('td');
-				const input = document.createElement('input');
-				input.type = 'text';
-				input.value = row.values[file.uri] ?? '';
-				input.dataset.uri = file.uri;
-				input.dataset.key = row.key;
-				input.addEventListener('change', () => {
-					vscode.postMessage({ type: 'edit', uri: file.uri, key: row.key, value: input.value });
-				});
-				td.appendChild(input);
-				tr.appendChild(td);
-			}
-
-			tbody.appendChild(tr);
-		}
+		appendNodes(tbody, state.tree, 0);
 		return tbody;
 	}
 
+	/** Recursively renders a node: a section row (with nested children) or a leaf row (with editable cells). */
+	function appendNodes(tbody, nodes, depth) {
+		for (const node of nodes) {
+			if (node.children.length > 0) {
+				tbody.appendChild(buildSectionRow(node, depth));
+				if (!collapsedPaths.has(node.path)) {
+					appendNodes(tbody, node.children, depth + 1);
+				}
+			} else {
+				tbody.appendChild(buildLeafRow(node, depth));
+			}
+		}
+	}
+
+	function buildSectionRow(node, depth) {
+		const tr = cloneTemplate('tpl-section-row').firstElementChild;
+		const td = tr.querySelector('td');
+		td.colSpan = 1 + state.files.length;
+		td.style.paddingLeft = `${8 + depth * 20}px`;
+
+		const collapsed = collapsedPaths.has(node.path);
+		td.querySelector('.toggle').textContent = collapsed ? '\u25B6' : '\u25BC';
+		td.querySelector('.section-name').textContent = node.name;
+
+		td.addEventListener('click', () => toggleCollapse(node.path));
+		td.querySelector('.remove-row').addEventListener('click', event => {
+			event.stopPropagation();
+			vscode.postMessage({ type: 'removeSection', path: node.path });
+		});
+
+		return tr;
+	}
+
+	function buildLeafRow(node, depth) {
+		const tr = cloneTemplate('tpl-leaf-row').firstElementChild;
+		const keyTd = tr.querySelector('td');
+		keyTd.style.paddingLeft = `${8 + depth * 20}px`;
+		keyTd.querySelector('.key-name').textContent = node.name;
+		keyTd.querySelector('.remove-row').addEventListener('click', () => vscode.postMessage({ type: 'removeKey', key: node.path }));
+
+		for (const file of state.files) {
+			const td = cloneTemplate('tpl-leaf-cell').firstElementChild;
+			const input = td.querySelector('input');
+			input.value = node.values[file.uri] ?? '';
+			input.dataset.uri = file.uri;
+			input.dataset.key = node.path;
+			input.addEventListener('change', () => {
+				vscode.postMessage({ type: 'edit', uri: file.uri, key: node.path, value: input.value });
+			});
+			tr.appendChild(td);
+		}
+
+		return tr;
+	}
+
+	function toggleCollapse(path) {
+		if (collapsedPaths.has(path)) {
+			collapsedPaths.delete(path);
+		} else {
+			collapsedPaths.add(path);
+		}
+		vscode.setState({ collapsed: [...collapsedPaths] });
+		render();
+	}
+
 	function buildAddRowForm() {
-		const form = document.createElement('form');
-		form.id = 'add-row-form';
-
-		const input = document.createElement('input');
-		input.type = 'text';
-		input.placeholder = 'New config item name';
-		form.appendChild(input);
-
-		const button = document.createElement('button');
-		button.type = 'submit';
-		button.textContent = '+ Add Item';
-		form.appendChild(button);
+		const form = cloneTemplate('tpl-add-row-form').firstElementChild;
+		const input = form.querySelector('input');
 
 		form.addEventListener('submit', event => {
 			event.preventDefault();
@@ -160,7 +172,7 @@
 		if (th) {
 			const dot = th.querySelector('.dirty-dot');
 			if (dot) { dot.style.visibility = dirty ? 'visible' : 'hidden'; }
-			const saveBtn = th.querySelector('.header-actions button');
+			const saveBtn = th.querySelector('.save-btn');
 			if (saveBtn) { saveBtn.disabled = !dirty; }
 		}
 		saveAllButton.disabled = !state.files.some(f => f.dirty);
