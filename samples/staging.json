@@ -1,0 +1,8 @@
+{
+  "api": {
+    "url": "https://staging.api.example.com",
+    "timeoutMs": 3000
+  },
+  "logLevel": "info",
+  "maxConnections": 20
+}

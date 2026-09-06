@@ -1,0 +1,8 @@
+{
+  "api": {
+    "url": "https://dev.api.example.com",
+    "timeoutMs": 3000
+  },
+  "logLevel": "debug",
+  "maxConnections": 5
+}

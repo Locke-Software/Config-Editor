@@ -1,0 +1,127 @@
+body {
+	font-family: var(--vscode-font-family);
+	color: var(--vscode-foreground);
+	padding: 0 16px 16px;
+}
+
+#toolbar {
+	position: sticky;
+	top: 0;
+	background: var(--vscode-editor-background);
+	padding: 12px 0;
+	display: flex;
+	gap: 8px;
+	z-index: 2;
+}
+
+button {
+	background: var(--vscode-button-background);
+	color: var(--vscode-button-foreground);
+	border: none;
+	padding: 4px 10px;
+	border-radius: 2px;
+	cursor: pointer;
+}
+
+button:hover:not(:disabled) {
+	background: var(--vscode-button-hoverBackground);
+}
+
+button:disabled {
+	opacity: 0.5;
+	cursor: default;
+}
+
+button.secondary {
+	background: var(--vscode-button-secondaryBackground);
+	color: var(--vscode-button-secondaryForeground);
+}
+
+table {
+	border-collapse: collapse;
+	width: 100%;
+}
+
+th, td {
+	border: 1px solid var(--vscode-panel-border);
+	padding: 4px 8px;
+	text-align: left;
+	vertical-align: top;
+}
+
+thead th {
+	position: sticky;
+	top: 44px;
+	background: var(--vscode-editorWidget-background);
+	z-index: 1;
+}
+
+th.key-column, td.key-column {
+	min-width: 160px;
+	font-weight: 600;
+}
+
+td.key-column {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	font-weight: normal;
+	border-bottom: 1px solid var(--vscode-panel-border);
+}
+
+.file-name {
+	font-weight: 600;
+}
+
+.dirty-dot {
+	color: var(--vscode-editorWarning-foreground, orange);
+}
+
+.header-actions {
+	display: flex;
+	gap: 4px;
+	margin-top: 4px;
+}
+
+tbody tr:nth-child(even) {
+	background: var(--vscode-list-hoverBackground);
+}
+
+td input {
+	width: 100%;
+	box-sizing: border-box;
+	background: var(--vscode-input-background);
+	color: var(--vscode-input-foreground);
+	border: 1px solid var(--vscode-input-border, transparent);
+	padding: 3px 6px;
+}
+
+td input:focus {
+	outline: 1px solid var(--vscode-focusBorder);
+}
+
+.remove-row {
+	padding: 0 6px;
+	font-size: 11px;
+}
+
+#add-row-form {
+	display: flex;
+	gap: 8px;
+	margin-top: 12px;
+}
+
+#add-row-form input {
+	flex: 1;
+	max-width: 260px;
+	background: var(--vscode-input-background);
+	color: var(--vscode-input-foreground);
+	border: 1px solid var(--vscode-input-border, transparent);
+	padding: 4px 6px;
+}
+
+.empty {
+	opacity: 0.7;
+	font-style: italic;
+}
