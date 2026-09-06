@@ -239,17 +239,14 @@
 	function buildSectionRow(node, depth) {
 		const tr = cloneTemplate('tpl-section-row').firstElementChild;
 		const td = tr.querySelector('td');
-		td.colSpan = 1 + state.files.length;
 		td.style.paddingLeft = `${8 + depth * 20}px`;
 
 		const collapsed = collapsedPaths.has(node.path);
 		td.querySelector('.toggle').textContent = collapsed ? '\u25B6' : '\u25BC';
 		td.querySelector('.section-name').textContent = node.name;
 
-		td.addEventListener('click', () => toggleCollapse(node.path));
-
 		// Whole-section reorder: same dot/tooltip styling as a misplaced field, just
-		// scoped to this one spanning cell since a section row has no per-file cells.
+		// scoped to the label cell since a section row has no per-file values.
 		td.classList.remove('cell-misplaced');
 		td.title = '';
 		if (node.misplacedIn?.length > 0) {
@@ -257,6 +254,15 @@
 			const names = node.misplacedIn.map(uri => state.files.find(f => f.uri === uri)?.name ?? uri);
 			td.title = `This section is in a different position in: ${names.join(', ')}`;
 		}
+
+		// One filler cell per file column instead of a single colspan cell -
+		// colspan cells don't reliably support position: sticky in Chromium,
+		// which broke the sticky key column specifically for section rows.
+		for (let i = 0; i < state.files.length; i++) {
+			tr.appendChild(cloneTemplate('tpl-section-filler').firstElementChild);
+		}
+
+		tr.addEventListener('click', () => toggleCollapse(node.path));
 
 		return tr;
 	}

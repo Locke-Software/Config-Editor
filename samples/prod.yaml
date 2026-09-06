@@ -1,0 +1,21 @@
+# prod environment
+api:
+  url: https://api.example.com
+  timeoutMs: 5000
+  retryCount: 3
+database:
+  port: 5432
+  host: prod-db.internal
+  name: app_prod
+  pool:
+    max: 50
+featureFlags:
+  newUi: false
+  betaSearch: false
+logging:
+  level: warn
+  format: json
+cache:
+  enabled: true
+cdn:
+  url: https://cdn.example.com

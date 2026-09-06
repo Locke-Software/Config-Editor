@@ -7,7 +7,11 @@
   "database": {
     "host": "staging-db.internal",
     "port": 5432,
-    "name": "app_staging"
+    "name": "app_staging",
+    "pool": {
+      "max": 20,
+      "min": 5
+    }
   },
   "cache": {
     "enabled": "truerrr",

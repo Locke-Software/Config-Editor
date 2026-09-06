@@ -1,0 +1,21 @@
+# dev environment
+api:
+  url: https://dev.api.example.com
+  timeoutMs: 3000
+  retryCount: 2
+database:
+  host: localhost
+  port: 5432
+  name: app_dev
+  pool:
+    min: 2
+    max: 10
+cache:
+  enabled: true
+  ttlSeconds: 30
+featureFlags:
+  newUi: true
+  betaSearch: true
+logging:
+  level: debug
+  format: pretty

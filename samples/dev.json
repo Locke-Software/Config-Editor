@@ -7,7 +7,11 @@
   "database": {
     "host": "localhost",
     "port": 5432,
-    "name": "app_dev"
+    "name": "app_dev",
+    "pool": {
+      "min": 2,
+      "max": 10
+    }
   },
   "cache": {
     "enabled": true,

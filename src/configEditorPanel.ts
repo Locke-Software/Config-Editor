@@ -513,16 +513,24 @@ function uniqueInOrder(items: string[]): string[] {
 }
 
 /**
- * Finds the (0-based) line where a field is likely defined, for "Go to Entry".
- * For properties/.env files the key is literal ("KEY=..."); for JSON, the dot-path's
- * last segment is matched as a quoted property name - an approximation, since JSON
- * doesn't otherwise carry a 1:1 line mapping back to our flattened dot-keys.
+ * Finds the (0-based) line where a field is likely defined, for "Go to Entry". Formats whose dot-path
+ * is only a display grouping (JSON, YAML, INI sections) match on the key's last segment instead of the
+ * full path - an approximation, since none of them carry an exact 1:1 line mapping back to our flattened keys.
  */
 function findLineForKey(text: string, format: ConfigFormat, key: string): number {
 	const lines = text.split(/\r\n|\r|\n/);
+	const leaf = key.split('.').pop() ?? key;
+
 	if (format === 'json') {
-		const leaf = key.split('.').pop() ?? key;
 		const pattern = new RegExp(`"${escapeRegExp(leaf)}"\\s*:`);
+		return lines.findIndex(line => pattern.test(line));
+	}
+	if (format === 'yaml') {
+		const pattern = new RegExp(`^\\s*"?${escapeRegExp(leaf)}"?\\s*:`);
+		return lines.findIndex(line => pattern.test(line));
+	}
+	if (format === 'ini') {
+		const pattern = new RegExp(`^\\s*${escapeRegExp(leaf)}\\s*[:=]`);
 		return lines.findIndex(line => pattern.test(line));
 	}
 	const pattern = new RegExp(`^\\s*${escapeRegExp(key)}\\s*[:=]`);

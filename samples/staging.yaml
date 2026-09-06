@@ -1,0 +1,20 @@
+# staging environment
+api:
+  url: https://staging.api.example.com
+  timeoutMs: 3000
+  retryCount: 3
+database:
+  host: staging-db.internal
+  port: 5432
+  name: app_staging
+  pool:
+    max: 20
+    min: 5
+cache:
+  enabled: true
+  ttlSeconds: 60
+featureFlags:
+  newUi: true
+logging:
+  format: json
+  level: info

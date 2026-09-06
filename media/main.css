@@ -7,11 +7,17 @@ body {
 	font-family: var(--vscode-font-family);
 	color: var(--vscode-foreground);
 	padding: 0 16px 16px;
+	height: 100vh;
+	box-sizing: border-box;
+	display: flex;
+	flex-direction: column;
+	/* The body itself never scrolls - only .table-wrapper does - so the sticky
+	   header can never be carried off-screen by an outer page scroll. */
+	overflow: hidden;
 }
 
 #toolbar {
-	position: sticky;
-	top: 0;
+	flex: 0 0 auto;
 	background: var(--vscode-editor-background);
 	padding: 12px 0;
 	display: flex;
@@ -82,8 +88,20 @@ button.secondary {
 }
 
 table {
-	border-collapse: collapse;
+	/* separate (not collapse): with collapsed borders, adjacent cell borders
+	   are merged and painted at the table-grid level, so they don't reliably
+	   move with a position: sticky cell during scroll - separate borders are
+	   each cell's own box, so they stick together with it correctly. */
+	border-collapse: separate;
+	border-spacing: 0;
 	width: 100%;
+}
+
+#table-container {
+	flex: 1 1 auto;
+	min-height: 0; /* let this shrink below its content size so the table-wrapper's flex-basis actually constrains it */
+	display: flex;
+	flex-direction: column;
 }
 
 /* A bordered, rounded "panel" for the table. It scrolls internally (rather
@@ -94,7 +112,8 @@ table {
 	border: 1px solid var(--vscode-panel-border);
 	border-radius: var(--radius);
 	overflow: auto;
-	max-height: calc(100vh - 160px);
+	flex: 1 1 auto;
+	min-height: 0;
 }
 
 th, td {
@@ -105,20 +124,43 @@ th, td {
 	vertical-align: top;
 }
 
+/* Column dividers, for both header and body cells. */
+th + th, td + td {
+	border-left: 1px solid var(--vscode-panel-border);
+}
+
+/* The sticky key column supplies its own right-hand divider instead (below),
+   since the regular left border above belongs to the next (non-sticky) cell
+   and would otherwise scroll away from the sticky column during horizontal
+   scrolling instead of staying attached to it. */
+.key-column + th, .key-column + td {
+	border-left: none;
+}
+
 thead th {
 	position: sticky;
 	top: 0;
 	background: var(--vscode-editorWidget-background);
 	z-index: 1;
-}
-
-thead th + th {
-	border-left: 1px solid rgba(128, 128, 128, 0.15);
+	/* Thicker than the regular row divider so the header clearly separates from the body. */
+	border-bottom: 2px solid var(--vscode-panel-border);
 }
 
 th.key-column, td.key-column {
+	position: sticky;
+	left: 0;
+	z-index: 1;
+	background: var(--vscode-editor-background);
 	min-width: 160px;
 	font-weight: 600;
+	border-right: 1px solid var(--vscode-panel-border);
+}
+
+/* The corner cell is sticky on both axes at once - it needs to sit above the
+   plain sticky header row and sticky key column cells it overlaps with. */
+thead th.key-column {
+	z-index: 2;
+	background: var(--vscode-editorWidget-background);
 }
 
 td.key-column {
@@ -158,6 +200,12 @@ body.settings-row-stripes tbody tr:nth-child(even) {
 	background: var(--vscode-list-inactiveSelectionBackground, rgba(128, 128, 128, 0.06));
 }
 
+/* The sticky key column paints its own background (see th.key-column, td.key-column
+   above), so the row stripe above wouldn't otherwise show through it. */
+body.settings-row-stripes tbody tr:nth-child(even) td.key-column {
+	background: var(--vscode-list-inactiveSelectionBackground, rgba(128, 128, 128, 0.06));
+}
+
 /* Column striping (toggleable via the settings menu). */
 body.settings-col-stripes tbody td:nth-child(even) {
 	background: var(--vscode-list-inactiveSelectionBackground, rgba(128, 128, 128, 0.06));
@@ -176,7 +224,7 @@ body.settings-row-hover tbody tr:hover td {
 	background: var(--vscode-list-hoverBackground) !important;
 }
 
-.section-row td.section {
+.section-row td.section, .section-row td.section-filler {
 	background: var(--vscode-sideBarSectionHeader-background, var(--vscode-editorWidget-background));
 	font-weight: 600;
 	cursor: pointer;
@@ -265,6 +313,7 @@ td input:focus {
 
 #add-row-form {
 	display: flex;
+	flex: 0 0 auto;
 	gap: 8px;
 	margin-top: 12px;
 }

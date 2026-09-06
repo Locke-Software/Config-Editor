@@ -7,7 +7,10 @@
   "database": {
     "port": 5432,
     "host": "prod-db.internal",
-    "name": "app_prod"
+    "name": "app_prod",
+    "pool": {
+      "max": 50
+    }
   },
     "cache": {
     "enabled": true,
