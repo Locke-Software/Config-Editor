@@ -4,6 +4,7 @@
 	const container = document.getElementById('table-container');
 	const saveAllButton = document.getElementById('save-all');
 	const addFileButton = document.getElementById('add-file');
+	const reloadButton = document.getElementById('reload');
 	const settingsToggle = document.getElementById('settings-toggle');
 	const settingsMenu = document.getElementById('settings-menu');
 
@@ -12,7 +13,7 @@
 
 	const persisted = vscode.getState() ?? {};
 	const collapsedPaths = new Set(persisted.collapsed ?? []);
-	const defaultSettings = { rowStripes: true, colStripes: false, rowHover: false, colHover: true };
+	const defaultSettings = { rowStripes: false, colStripes: false, rowHover: false, colHover: false };
 	const settings = { ...defaultSettings, ...(persisted.settings ?? {}) };
 
 	function persist() {
@@ -29,11 +30,15 @@
 			case 'setDirty':
 				setDirty(message.uri, message.dirty);
 				break;
+			case 'setUnsaved':
+				setUnsaved(message.uri, message.key, message.unsaved);
+				break;
 		}
 	});
 
 	saveAllButton.addEventListener('click', () => vscode.postMessage({ type: 'saveAll' }));
 	addFileButton.addEventListener('click', () => vscode.postMessage({ type: 'addFile' }));
+	reloadButton.addEventListener('click', () => vscode.postMessage({ type: 'reload' }));
 
 	// Display settings popover: toggle open/closed, close on outside click, and
 	// apply/persist each checkbox's value as it changes.
@@ -73,6 +78,37 @@
 			clearColumnHighlight();
 		}
 	}
+
+	// Custom right-click context menu (a plain browser context menu can't have
+	// custom items). Callers pass a list of {label, onSelect} entries.
+	let contextMenuEl = null;
+
+	function showContextMenu(x, y, items) {
+		hideContextMenu();
+		const menu = document.createElement('div');
+		menu.className = 'context-menu';
+		menu.style.left = `${x}px`;
+		menu.style.top = `${y}px`;
+		for (const item of items) {
+			const button = document.createElement('button');
+			button.textContent = item.label;
+			button.addEventListener('click', () => {
+				hideContextMenu();
+				item.onSelect();
+			});
+			menu.appendChild(button);
+		}
+		document.body.appendChild(menu);
+		contextMenuEl = menu;
+	}
+
+	function hideContextMenu() {
+		contextMenuEl?.remove();
+		contextMenuEl = null;
+	}
+
+	document.addEventListener('click', hideContextMenu);
+	window.addEventListener('blur', hideContextMenu);
 
 	// Column hover highlight: track which column index is under the pointer and
 	// tag every (non-spanning) cell that shares it, since CSS alone can't select
@@ -166,6 +202,13 @@
 
 			th.querySelector('.remove-btn').addEventListener('click', () => vscode.postMessage({ type: 'removeFile', uri: file.uri }));
 
+			th.addEventListener('contextmenu', event => {
+				event.preventDefault();
+				showContextMenu(event.pageX, event.pageY, [
+					{ label: 'Open File', onSelect: () => vscode.postMessage({ type: 'openFile', uri: file.uri }) }
+				]);
+			});
+
 			tr.appendChild(th);
 		}
 
@@ -205,6 +248,16 @@
 
 		td.addEventListener('click', () => toggleCollapse(node.path));
 
+		// Whole-section reorder: same dot/tooltip styling as a misplaced field, just
+		// scoped to this one spanning cell since a section row has no per-file cells.
+		td.classList.remove('cell-misplaced');
+		td.title = '';
+		if (node.misplacedIn?.length > 0) {
+			td.classList.add('cell-misplaced');
+			const names = node.misplacedIn.map(uri => state.files.find(f => f.uri === uri)?.name ?? uri);
+			td.title = `This section is in a different position in: ${names.join(', ')}`;
+		}
+
 		return tr;
 	}
 
@@ -223,26 +276,81 @@
 			input.addEventListener('change', () => {
 				vscode.postMessage({ type: 'edit', uri: file.uri, key: node.path, value: input.value });
 			});
-			applyValidation(td, node, file.uri);
+			td.addEventListener('contextmenu', event => {
+				event.preventDefault();
+				showContextMenu(event.pageX, event.pageY, [
+					{ label: 'Go to Entry', onSelect: () => vscode.postMessage({ type: 'goToEntry', uri: file.uri, key: node.path }) }
+				]);
+			});
+			applyCellAnnotations(td, node, file.uri);
 			tr.appendChild(td);
 		}
 
 		return tr;
 	}
 
-	/** Flags a cell with a warning-colored inner border + tooltip when the extension reports an issue. */
-	function applyValidation(td, node, uri) {
-		const issues = [];
+	/** Flags a cell with validation warnings and/or change-tracking stripes, plus a combined tooltip.
+	 *  Safe to call more than once on the same cell (e.g. from setUnsaved) since it clears first. */
+	function applyCellAnnotations(td, node, uri) {
+		td.classList.remove('cell-missing', 'cell-misplaced', 'cell-unsaved', 'cell-uncommitted');
+		const messages = [];
+
 		if (node.missingIn?.includes(uri)) {
 			td.classList.add('cell-missing');
-			issues.push('Missing from this file');
+			messages.push('Missing from this file');
 		}
 		if (node.misplacedIn?.includes(uri)) {
 			td.classList.add('cell-misplaced');
-			issues.push('Appears in a different position here than in the other open files');
+			messages.push('Appears in a different position here than in the other open files');
 		}
-		if (issues.length > 0) {
-			td.title = issues.join(' \u2014 ');
+
+		// Unsaved (grey) takes priority over uncommitted (blue): once saved, a field
+		// either stops changing or moves from "unsaved" to "uncommitted".
+		if (node.unsavedIn?.includes(uri)) {
+			td.classList.add('cell-unsaved');
+			messages.push('Edited but not saved to disk');
+		} else if (node.uncommittedIn?.includes(uri)) {
+			td.classList.add('cell-uncommitted');
+			messages.push('Saved but not committed to version control');
+		}
+
+		td.title = messages.join(' \u2014 ');
+	}
+
+	/** Depth-first search for the leaf/section node with this exact path. */
+	function findNode(nodes, targetPath) {
+		for (const node of nodes) {
+			if (node.path === targetPath) {
+				return node;
+			}
+			if (node.children.length > 0) {
+				const found = findNode(node.children, targetPath);
+				if (found) {
+					return found;
+				}
+			}
+		}
+		return null;
+	}
+
+	/** Updates one cell's grey "unsaved" indicator in place, without a full re-render (would steal focus mid-typing). */
+	function setUnsaved(uri, key, unsaved) {
+		const node = findNode(state.tree, key);
+		if (!node) {
+			return;
+		}
+		node.unsavedIn = node.unsavedIn ?? [];
+		const index = node.unsavedIn.indexOf(uri);
+		if (unsaved && index === -1) {
+			node.unsavedIn.push(uri);
+		} else if (!unsaved && index !== -1) {
+			node.unsavedIn.splice(index, 1);
+		}
+
+		const input = container.querySelector(`input[data-uri="${cssEscape(uri)}"][data-key="${cssEscape(key)}"]`);
+		const td = input?.closest('td');
+		if (td) {
+			applyCellAnnotations(td, node, uri);
 		}
 	}
 

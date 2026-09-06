@@ -10,14 +10,18 @@
     "name": "app_staging"
   },
   "cache": {
-    "enabled": true,
+    "enabled": "truerrr",
     "ttlSeconds": 60
   },
   "featureFlags": {
-    "newUi": true
+    "newUi": true,
+    "betaSearch": "eeee"
   },
   "logging": {
-    "format": "json",
+    "format": "jsoneee",
     "level": "info"
+  },
+  "cdn": {
+    "url": "ffff"
   }
 }

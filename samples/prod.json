@@ -9,16 +9,17 @@
     "host": "prod-db.internal",
     "name": "app_prod"
   },
-  "cache": {
-    "enabled": true
+    "cache": {
+    "enabled": true,
+    "ttlSeconds": "dzqdzq"
   },
   "featureFlags": {
-    "newUi": false,
-    "betaSearch": false
+    "newUi": "falsetest",
+    "betaSearch": "falseddddddd"
   },
   "logging": {
-    "level": "warn",
-    "format": "json"
+    "level": "warndzqdzq",
+    "format": "jsondzqdqz"
   },
   "cdn": {
     "url": "https://cdn.example.com"

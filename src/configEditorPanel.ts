@@ -2,11 +2,16 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
 import { ConfigEntries, ConfigFormat, detectFormat, parseConfig, serializeConfig } from './configParser';
+import { readGitHeadContent } from './gitBaseline';
 
 interface FileState {
 	uri: vscode.Uri;
 	format: ConfigFormat;
 	entries: ConfigEntries;
+	/** Snapshot of `entries` as last read from / written to disk - used to detect unsaved edits. */
+	savedEntries: ConfigEntries;
+	/** Snapshot parsed from the file's git HEAD content, if a git baseline is available. */
+	gitEntries: ConfigEntries | undefined;
 	dirty: boolean;
 }
 
@@ -20,6 +25,10 @@ interface UiTreeNode {
 	missingIn?: string[];
 	/** URIs of files where this field's position doesn't match the canonical key order. */
 	misplacedIn?: string[];
+	/** URIs of files where this field has been edited but not saved to disk. */
+	unsavedIn?: string[];
+	/** URIs of files where this field is saved to disk but differs from the git HEAD version. */
+	uncommittedIn?: string[];
 }
 
 const OPEN_DIALOG_FILTERS: Record<string, string[]> = {
@@ -62,6 +71,12 @@ export class ConfigEditorPanel {
 		this.panel.webview.html = this.getHtml();
 		this.panel.webview.onDidReceiveMessage(msg => this.onMessage(msg), null, this.disposables);
 		this.panel.onDidDispose(() => this.dispose(), null, this.disposables);
+		// Catches the common case of committing/switching branches in Source Control, then tabbing back here.
+		this.panel.onDidChangeViewState(e => {
+			if (e.webviewPanel.visible) {
+				void this.refreshGitBaselines();
+			}
+		}, null, this.disposables);
 	}
 
 	private dispose(): void {
@@ -88,9 +103,22 @@ export class ConfigEditorPanel {
 					this.keyOrder.push(key);
 				}
 			}
-			this.files.push({ uri, format, entries, dirty: false });
+			const file: FileState = { uri, format, entries, savedEntries: new Map(entries), gitEntries: undefined, dirty: false };
+			this.files.push(file);
+			void this.loadGitBaseline(file).then(() => this.render());
 		}
 		this.updateTitle();
+	}
+
+	/** Fetches (or clears) the git HEAD snapshot used to detect uncommitted-but-saved changes. */
+	private async loadGitBaseline(file: FileState): Promise<void> {
+		const headText = await readGitHeadContent(file.uri);
+		file.gitEntries = headText !== undefined ? parseConfig(headText, file.format) : undefined;
+	}
+
+	private async refreshGitBaselines(): Promise<void> {
+		await Promise.all(this.files.map(f => this.loadGitBaseline(f)));
+		this.render();
 	}
 
 	private updateTitle(): void {
@@ -131,6 +159,15 @@ export class ConfigEditorPanel {
 			case 'removeFile':
 				await this.handleRemoveFile(message.uri);
 				break;
+			case 'reload':
+				await this.reloadAllFiles();
+				break;
+			case 'openFile':
+				await this.openFile(message.uri);
+				break;
+			case 'goToEntry':
+				await this.goToEntry(message.uri, message.key);
+				break;
 		}
 	}
 
@@ -148,6 +185,10 @@ export class ConfigEditorPanel {
 			this.updateTitle();
 			void this.panel.webview.postMessage({ type: 'setDirty', uri: uriString, dirty: true });
 		}
+		// Lightweight, cell-scoped update (like setDirty above) instead of a full render()
+		// so we don't steal focus from the input the user is still typing in.
+		const unsaved = file.entries.get(key) !== file.savedEntries.get(key);
+		void this.panel.webview.postMessage({ type: 'setUnsaved', uri: uriString, key, unsaved });
 	}
 
 	private handleAddKey(key: string): void {
@@ -232,9 +273,68 @@ export class ConfigEditorPanel {
 		}
 		const text = serializeConfig(file.entries, file.format);
 		await vscode.workspace.fs.writeFile(file.uri, Buffer.from(text, 'utf8'));
+		file.savedEntries = new Map(file.entries);
 		file.dirty = false;
 		this.updateTitle();
 		this.render();
+	}
+
+	/** Re-reads every open file from disk, discarding in-memory edits, then refreshes the git baseline. */
+	private async reloadAllFiles(): Promise<void> {
+		const dirtyFiles = this.files.filter(f => f.dirty);
+		if (dirtyFiles.length > 0) {
+			const names = dirtyFiles.map(f => path.basename(f.uri.fsPath)).join(', ');
+			const choice = await vscode.window.showWarningMessage(
+				`Reload from disk? Unsaved changes in ${names} will be lost.`,
+				{ modal: true },
+				'Reload'
+			);
+			if (choice !== 'Reload') {
+				return;
+			}
+		}
+
+		for (const file of this.files) {
+			const bytes = await vscode.workspace.fs.readFile(file.uri);
+			const entries = parseConfig(Buffer.from(bytes).toString('utf8'), file.format);
+			for (const key of entries.keys()) {
+				if (!this.keyOrder.includes(key)) {
+					this.keyOrder.push(key);
+				}
+			}
+			file.entries = entries;
+			file.savedEntries = new Map(entries);
+			file.dirty = false;
+		}
+		this.updateTitle();
+		await this.refreshGitBaselines(); // also re-renders
+	}
+
+	private async openFile(uriString: string): Promise<void> {
+		const file = this.files.find(f => f.uri.toString() === uriString);
+		if (!file) {
+			return;
+		}
+		const document = await vscode.workspace.openTextDocument(file.uri);
+		await vscode.window.showTextDocument(document, { viewColumn: vscode.ViewColumn.Beside });
+	}
+
+	/** Opens the file beside the panel and selects the line where this field is (approximately) defined. */
+	private async goToEntry(uriString: string, key: string): Promise<void> {
+		const file = this.files.find(f => f.uri.toString() === uriString);
+		if (!file) {
+			return;
+		}
+		const document = await vscode.workspace.openTextDocument(file.uri);
+		const editor = await vscode.window.showTextDocument(document, { viewColumn: vscode.ViewColumn.Beside });
+
+		const lineIndex = findLineForKey(document.getText(), file.format, key);
+		if (lineIndex === -1) {
+			return;
+		}
+		const range = document.lineAt(lineIndex).range;
+		editor.selection = new vscode.Selection(range.start, range.end);
+		editor.revealRange(range, vscode.TextEditorRevealType.InCenter);
 	}
 
 	// -----------------------------------------------------------------------
@@ -275,6 +375,7 @@ export class ConfigEditorPanel {
 		}
 
 		const misplacedByFile = this.findMisplacedKeys();
+		const misplacedSectionsByFile = this.findMisplacedSections();
 
 		// A node is a leaf (has an editable value per file) only if it has no children.
 		for (const [nodePath, node] of nodeByPath) {
@@ -292,10 +393,63 @@ export class ConfigEditorPanel {
 				if (misplacedIn.length > 0) {
 					node.misplacedIn = misplacedIn;
 				}
+
+				const unsavedIn = this.files
+					.filter(f => f.entries.get(nodePath) !== f.savedEntries.get(nodePath))
+					.map(f => f.uri.toString());
+				if (unsavedIn.length > 0) {
+					node.unsavedIn = unsavedIn;
+				}
+
+				const uncommittedIn = this.files
+					.filter(f => f.gitEntries !== undefined && f.savedEntries.get(nodePath) !== f.gitEntries.get(nodePath))
+					.map(f => f.uri.toString());
+				if (uncommittedIn.length > 0) {
+					node.uncommittedIn = uncommittedIn;
+				}
+			}
+		}
+
+		// Whole sections (top-level groups) can also be reordered as a block; flag those separately
+		// from individual field mismatches, since a section row has no per-field values of its own.
+		for (const node of roots) {
+			if (node.children.length > 0) {
+				const misplacedIn = this.files
+					.filter(f => misplacedSectionsByFile.get(f.uri.toString())?.has(node.path))
+					.map(f => f.uri.toString());
+				if (misplacedIn.length > 0) {
+					node.misplacedIn = misplacedIn;
+				}
 			}
 		}
 
 		return roots;
+	}
+
+	/**
+	 * Same idea as findMisplacedKeys(), but at the top-level-section granularity: each key is
+	 * reduced to its first path segment (e.g. "database.host" -> "database") before comparing a
+	 * file's actual vs. canonical order, so a whole section moved as a block gets flagged even if
+	 * its own internal field order didn't change.
+	 */
+	private findMisplacedSections(): Map<string, Set<string>> {
+		const result = new Map<string, Set<string>>();
+		const topLevelOf = (key: string) => key.split('.')[0];
+
+		for (const file of this.files) {
+			const expectedOrder = uniqueInOrder(this.keyOrder.filter(key => file.entries.has(key)).map(topLevelOf));
+			const actualOrder = uniqueInOrder([...file.entries.keys()].map(topLevelOf));
+			const misplaced = new Set<string>();
+			for (let i = 0; i < actualOrder.length; i++) {
+				if (actualOrder[i] !== expectedOrder[i]) {
+					misplaced.add(actualOrder[i]);
+				}
+			}
+			if (misplaced.size > 0) {
+				result.set(file.uri.toString(), misplaced);
+			}
+		}
+		return result;
 	}
 
 	/**
@@ -343,4 +497,38 @@ function getNonce(): string {
 		text += possible.charAt(Math.floor(Math.random() * possible.length));
 	}
 	return text;
+}
+
+/** De-duplicates a list while preserving each item's first-seen order. */
+function uniqueInOrder(items: string[]): string[] {
+	const seen = new Set<string>();
+	const out: string[] = [];
+	for (const item of items) {
+		if (!seen.has(item)) {
+			seen.add(item);
+			out.push(item);
+		}
+	}
+	return out;
+}
+
+/**
+ * Finds the (0-based) line where a field is likely defined, for "Go to Entry".
+ * For properties/.env files the key is literal ("KEY=..."); for JSON, the dot-path's
+ * last segment is matched as a quoted property name - an approximation, since JSON
+ * doesn't otherwise carry a 1:1 line mapping back to our flattened dot-keys.
+ */
+function findLineForKey(text: string, format: ConfigFormat, key: string): number {
+	const lines = text.split(/\r\n|\r|\n/);
+	if (format === 'json') {
+		const leaf = key.split('.').pop() ?? key;
+		const pattern = new RegExp(`"${escapeRegExp(leaf)}"\\s*:`);
+		return lines.findIndex(line => pattern.test(line));
+	}
+	const pattern = new RegExp(`^\\s*${escapeRegExp(key)}\\s*[:=]`);
+	return lines.findIndex(line => pattern.test(line));
+}
+
+function escapeRegExp(value: string): string {
+	return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }

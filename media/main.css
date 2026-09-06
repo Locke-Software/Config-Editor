@@ -252,6 +252,17 @@ td input:focus {
 	background: var(--vscode-editorError-foreground, #f14c4c);
 }
 
+/* Change tracking: a VS Code-gutter-style stripe on the inside-left edge of
+   the cell (inset box-shadow, so it never shifts layout like a real border
+   would). Grey = edited but not saved; blue = saved but not committed. */
+.cell-unsaved {
+	box-shadow: inset 3px 0 0 0 var(--vscode-descriptionForeground, #8c8c8c);
+}
+
+.cell-uncommitted {
+	box-shadow: inset 3px 0 0 0 #6cb6ff;
+}
+
 #add-row-form {
 	display: flex;
 	gap: 8px;
@@ -274,4 +285,30 @@ td input:focus {
 	padding: 16px;
 	border: 1px dashed var(--vscode-panel-border);
 	border-radius: var(--radius);
+}
+
+.context-menu {
+	position: absolute;
+	background: var(--vscode-menu-background, var(--vscode-editorWidget-background));
+	color: var(--vscode-menu-foreground, var(--vscode-foreground));
+	border: 1px solid var(--vscode-menu-border, var(--vscode-panel-border));
+	border-radius: var(--radius);
+	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+	padding: 4px;
+	display: flex;
+	flex-direction: column;
+	min-width: 160px;
+	z-index: 10;
+}
+
+.context-menu button {
+	background: transparent;
+	color: inherit;
+	text-align: left;
+	border-radius: var(--radius-sm);
+	padding: 6px 10px;
+}
+
+.context-menu button:hover {
+	background: var(--vscode-list-hoverBackground);
 }
