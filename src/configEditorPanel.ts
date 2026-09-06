@@ -16,6 +16,10 @@ interface UiTreeNode {
 	name: string;
 	children: UiTreeNode[];
 	values?: Record<string, string>;
+	/** URIs of files where this field is absent (only set when at least one other file has it). */
+	missingIn?: string[];
+	/** URIs of files where this field's position doesn't match the canonical key order. */
+	misplacedIn?: string[];
 }
 
 const OPEN_DIALOG_FILTERS: Record<string, string[]> = {
@@ -270,14 +274,51 @@ export class ConfigEditorPanel {
 			}
 		}
 
+		const misplacedByFile = this.findMisplacedKeys();
+
 		// A node is a leaf (has an editable value per file) only if it has no children.
 		for (const [nodePath, node] of nodeByPath) {
 			if (node.children.length === 0) {
 				node.values = Object.fromEntries(this.files.map(f => [f.uri.toString(), f.entries.get(nodePath) ?? '']));
+
+				const presentIn = this.files.filter(f => f.entries.has(nodePath));
+				if (presentIn.length > 0 && presentIn.length < this.files.length) {
+					node.missingIn = this.files.filter(f => !f.entries.has(nodePath)).map(f => f.uri.toString());
+				}
+
+				const misplacedIn = this.files
+					.filter(f => misplacedByFile.get(f.uri.toString())?.has(nodePath))
+					.map(f => f.uri.toString());
+				if (misplacedIn.length > 0) {
+					node.misplacedIn = misplacedIn;
+				}
 			}
 		}
 
 		return roots;
+	}
+
+	/**
+	 * For each file, compares the order its fields actually appear in against the order they'd be in
+	 * if the canonical `keyOrder` were filtered down to just that file's fields. Any field whose
+	 * position differs between the two is "misplaced" relative to the other open files.
+	 */
+	private findMisplacedKeys(): Map<string, Set<string>> {
+		const result = new Map<string, Set<string>>();
+		for (const file of this.files) {
+			const expectedOrder = this.keyOrder.filter(key => file.entries.has(key));
+			const actualOrder = [...file.entries.keys()];
+			const misplaced = new Set<string>();
+			for (let i = 0; i < actualOrder.length; i++) {
+				if (actualOrder[i] !== expectedOrder[i]) {
+					misplaced.add(actualOrder[i]);
+				}
+			}
+			if (misplaced.size > 0) {
+				result.set(file.uri.toString(), misplaced);
+			}
+		}
+		return result;
 	}
 
 	private getHtml(): string {

@@ -4,10 +4,20 @@
 	const container = document.getElementById('table-container');
 	const saveAllButton = document.getElementById('save-all');
 	const addFileButton = document.getElementById('add-file');
+	const settingsToggle = document.getElementById('settings-toggle');
+	const settingsMenu = document.getElementById('settings-menu');
 
 	/** @type {{ files: {uri:string,name:string,dirty:boolean}[], tree: {path:string,name:string,children:any[],values?:Record<string,string>}[] }} */
 	let state = { files: [], tree: [] };
-	const collapsedPaths = new Set(vscode.getState()?.collapsed ?? []);
+
+	const persisted = vscode.getState() ?? {};
+	const collapsedPaths = new Set(persisted.collapsed ?? []);
+	const defaultSettings = { rowStripes: true, colStripes: false, rowHover: false, colHover: true };
+	const settings = { ...defaultSettings, ...(persisted.settings ?? {}) };
+
+	function persist() {
+		vscode.setState({ collapsed: [...collapsedPaths], settings });
+	}
 
 	window.addEventListener('message', event => {
 		const message = event.data;
@@ -24,6 +34,87 @@
 
 	saveAllButton.addEventListener('click', () => vscode.postMessage({ type: 'saveAll' }));
 	addFileButton.addEventListener('click', () => vscode.postMessage({ type: 'addFile' }));
+
+	// Display settings popover: toggle open/closed, close on outside click, and
+	// apply/persist each checkbox's value as it changes.
+	settingsToggle.addEventListener('click', event => {
+		event.stopPropagation();
+		settingsMenu.hidden = !settingsMenu.hidden;
+	});
+
+	document.addEventListener('click', event => {
+		if (!settingsMenu.hidden && !event.target.closest('.settings')) {
+			settingsMenu.hidden = true;
+		}
+	});
+
+	const settingInputs = {
+		rowStripes: document.getElementById('setting-row-stripes'),
+		colStripes: document.getElementById('setting-col-stripes'),
+		rowHover: document.getElementById('setting-row-hover'),
+		colHover: document.getElementById('setting-col-hover')
+	};
+
+	for (const [key, input] of Object.entries(settingInputs)) {
+		input.checked = settings[key];
+		input.addEventListener('change', () => {
+			settings[key] = input.checked;
+			applySettingsToDom();
+			persist();
+		});
+	}
+
+	function applySettingsToDom() {
+		document.body.classList.toggle('settings-row-stripes', settings.rowStripes);
+		document.body.classList.toggle('settings-col-stripes', settings.colStripes);
+		document.body.classList.toggle('settings-row-hover', settings.rowHover);
+		if (!settings.colHover) {
+			hoveredColumn = -1;
+			clearColumnHighlight();
+		}
+	}
+
+	// Column hover highlight: track which column index is under the pointer and
+	// tag every (non-spanning) cell that shares it, since CSS alone can't select
+	// "all cells in this column" across rows.
+	let hoveredColumn = -1;
+
+	container.addEventListener('mouseover', event => {
+		if (!settings.colHover) {
+			return;
+		}
+		const cell = event.target.closest('td, th');
+		if (!cell || cell.colSpan > 1 || cell.cellIndex === hoveredColumn) {
+			return;
+		}
+		hoveredColumn = cell.cellIndex;
+		applyColumnHighlight(hoveredColumn);
+	});
+
+	container.addEventListener('mouseleave', () => {
+		hoveredColumn = -1;
+		clearColumnHighlight();
+	});
+
+	function applyColumnHighlight(index) {
+		clearColumnHighlight();
+		const table = container.querySelector('table');
+		if (!table) {
+			return;
+		}
+		for (const row of table.rows) {
+			const cell = row.cells[index];
+			if (cell && cell.colSpan <= 1) {
+				cell.classList.add('col-hover');
+			}
+		}
+	}
+
+	function clearColumnHighlight() {
+		container.querySelectorAll('.col-hover').forEach(el => el.classList.remove('col-hover'));
+	}
+
+	applySettingsToDom();
 
 	/** Clones a <template id="..."> from main.html; its markup drives the table's structure. */
 	function cloneTemplate(id) {
@@ -44,7 +135,12 @@
 		const table = document.createElement('table');
 		table.appendChild(buildHeader());
 		table.appendChild(buildBody());
-		container.appendChild(table);
+
+		const wrapper = document.createElement('div');
+		wrapper.className = 'table-wrapper';
+		wrapper.appendChild(table);
+
+		container.appendChild(wrapper);
 		container.appendChild(buildAddRowForm());
 	}
 
@@ -108,10 +204,6 @@
 		td.querySelector('.section-name').textContent = node.name;
 
 		td.addEventListener('click', () => toggleCollapse(node.path));
-		td.querySelector('.remove-row').addEventListener('click', event => {
-			event.stopPropagation();
-			vscode.postMessage({ type: 'removeSection', path: node.path });
-		});
 
 		return tr;
 	}
@@ -121,7 +213,6 @@
 		const keyTd = tr.querySelector('td');
 		keyTd.style.paddingLeft = `${8 + depth * 20}px`;
 		keyTd.querySelector('.key-name').textContent = node.name;
-		keyTd.querySelector('.remove-row').addEventListener('click', () => vscode.postMessage({ type: 'removeKey', key: node.path }));
 
 		for (const file of state.files) {
 			const td = cloneTemplate('tpl-leaf-cell').firstElementChild;
@@ -132,10 +223,27 @@
 			input.addEventListener('change', () => {
 				vscode.postMessage({ type: 'edit', uri: file.uri, key: node.path, value: input.value });
 			});
+			applyValidation(td, node, file.uri);
 			tr.appendChild(td);
 		}
 
 		return tr;
+	}
+
+	/** Flags a cell with a warning-colored inner border + tooltip when the extension reports an issue. */
+	function applyValidation(td, node, uri) {
+		const issues = [];
+		if (node.missingIn?.includes(uri)) {
+			td.classList.add('cell-missing');
+			issues.push('Missing from this file');
+		}
+		if (node.misplacedIn?.includes(uri)) {
+			td.classList.add('cell-misplaced');
+			issues.push('Appears in a different position here than in the other open files');
+		}
+		if (issues.length > 0) {
+			td.title = issues.join(' \u2014 ');
+		}
 	}
 
 	function toggleCollapse(path) {
@@ -144,7 +252,7 @@
 		} else {
 			collapsedPaths.add(path);
 		}
-		vscode.setState({ collapsed: [...collapsedPaths] });
+		vscode.setState({ collapsed: [...collapsedPaths], settings });
 		render();
 	}
 

@@ -9,8 +9,19 @@
 </head>
 <body>
 	<div id="toolbar">
-		<button id="save-all">Save All</button>
-		<button id="add-file">+ Add Environment</button>
+		<div class="toolbar-actions">
+			<button id="save-all">Save All</button>
+			<button id="add-file">+ Add Environment</button>
+		</div>
+		<div class="settings">
+			<button id="settings-toggle" title="Display settings" aria-haspopup="true">&#9881;</button>
+			<div id="settings-menu" class="settings-menu" hidden>
+				<label><input type="checkbox" id="setting-row-stripes"> Alternate row colors</label>
+				<label><input type="checkbox" id="setting-col-stripes"> Alternate column colors</label>
+				<label><input type="checkbox" id="setting-row-hover"> Highlight row on hover</label>
+				<label><input type="checkbox" id="setting-col-hover"> Highlight column on hover</label>
+			</div>
+		</div>
 	</div>
 	<div id="table-container"></div>
 
@@ -48,7 +59,6 @@
 						<span class="toggle"></span>
 						<span class="section-name"></span>
 					</span>
-					<button class="remove-row secondary" title="Remove this section and everything in it">&#10007;</button>
 				</div>
 			</td>
 		</tr>
@@ -59,7 +69,6 @@
 			<td class="key-column">
 				<div class="cell-content">
 					<span class="key-name"></span>
-					<button class="remove-row secondary" title="Remove this config item">&#10007;</button>
 				</div>
 			</td>
 		</tr>

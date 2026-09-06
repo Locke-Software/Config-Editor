@@ -1,3 +1,8 @@
+:root {
+	--radius: 6px;
+	--radius-sm: 4px;
+}
+
 body {
 	font-family: var(--vscode-font-family);
 	color: var(--vscode-foreground);
@@ -10,8 +15,47 @@ body {
 	background: var(--vscode-editor-background);
 	padding: 12px 0;
 	display: flex;
-	gap: 8px;
+	justify-content: space-between;
+	align-items: center;
 	z-index: 2;
+}
+
+.toolbar-actions {
+	display: flex;
+	gap: 8px;
+}
+
+.settings {
+	position: relative;
+}
+
+.settings-menu {
+	position: absolute;
+	top: 100%;
+	right: 0;
+	margin-top: 4px;
+	background: var(--vscode-editorWidget-background);
+	border: 1px solid var(--vscode-panel-border);
+	border-radius: var(--radius);
+	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+	padding: 8px;
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	white-space: nowrap;
+	z-index: 3;
+}
+
+.settings-menu[hidden] {
+	display: none;
+}
+
+.settings-menu label {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	font-size: 12px;
+	cursor: pointer;
 }
 
 button {
@@ -19,7 +63,7 @@ button {
 	color: var(--vscode-button-foreground);
 	border: none;
 	padding: 4px 10px;
-	border-radius: 2px;
+	border-radius: var(--radius);
 	cursor: pointer;
 }
 
@@ -42,8 +86,20 @@ table {
 	width: 100%;
 }
 
-th, td {
+/* A bordered, rounded "panel" for the table. It scrolls internally (rather
+   than the page) so the sticky header can clip to these rounded corners -
+   overflow on an ancestor with no scroll box of its own would otherwise
+   break position: sticky entirely. */
+.table-wrapper {
 	border: 1px solid var(--vscode-panel-border);
+	border-radius: var(--radius);
+	overflow: auto;
+	max-height: calc(100vh - 160px);
+}
+
+th, td {
+	border: none;
+	border-bottom: 1px solid var(--vscode-panel-border);
 	padding: 4px 8px;
 	text-align: left;
 	vertical-align: top;
@@ -51,9 +107,13 @@ th, td {
 
 thead th {
 	position: sticky;
-	top: 44px;
+	top: 0;
 	background: var(--vscode-editorWidget-background);
 	z-index: 1;
+}
+
+thead th + th {
+	border-left: 1px solid rgba(128, 128, 128, 0.15);
 }
 
 th.key-column, td.key-column {
@@ -63,7 +123,6 @@ th.key-column, td.key-column {
 
 td.key-column {
 	font-weight: normal;
-	border-bottom: 1px solid var(--vscode-panel-border);
 }
 
 /* Flex layout lives on this inner wrapper, not on th/td directly, so the
@@ -94,8 +153,27 @@ td.key-column {
 	gap: 4px;
 }
 
-tbody tr:nth-child(even) {
+/* Row striping (toggleable via the settings menu). */
+body.settings-row-stripes tbody tr:nth-child(even) {
+	background: var(--vscode-list-inactiveSelectionBackground, rgba(128, 128, 128, 0.06));
+}
+
+/* Column striping (toggleable via the settings menu). */
+body.settings-col-stripes tbody td:nth-child(even) {
+	background: var(--vscode-list-inactiveSelectionBackground, rgba(128, 128, 128, 0.06));
+}
+
+/* Row highlight on hover (toggleable via the settings menu). */
+body.settings-row-hover tbody tr:hover td {
 	background: var(--vscode-list-hoverBackground);
+}
+
+/* Column highlight on hover: main.js tags matching cells with this class only
+   when the setting is enabled. !important because a plain class can't out-
+   specify the "body.settings-*" stripe rules above, and this active hover
+   state must always win over a static stripe when both are on. */
+.col-hover {
+	background: var(--vscode-list-hoverBackground) !important;
 }
 
 .section-row td.section {
@@ -121,19 +199,57 @@ tbody tr:nth-child(even) {
 td input {
 	width: 100%;
 	box-sizing: border-box;
-	background: var(--vscode-input-background);
-	color: var(--vscode-input-foreground);
-	border: 1px solid var(--vscode-input-border, transparent);
+	background: transparent;
+	color: var(--vscode-foreground);
+	border: 1px solid transparent;
+	border-radius: var(--radius-sm);
 	padding: 3px 6px;
 }
 
+td input:hover {
+	background: var(--vscode-input-background);
+}
+
 td input:focus {
-	outline: 1px solid var(--vscode-focusBorder);
+	background: var(--vscode-input-background);
+	color: var(--vscode-input-foreground);
+	border-color: var(--vscode-focusBorder);
+	outline: none;
 }
 
 .remove-row {
 	padding: 0 6px;
 	font-size: 11px;
+}
+
+/* Validation: a small corner dot instead of a border, so flagged cells stay
+   visually calm; hovering anywhere in the cell (title lives on the td) shows
+   the tooltip. Only one ::after exists per cell, so the more specific
+   combined-issue rule below wins when both apply. */
+.cell-missing, .cell-misplaced {
+	position: relative;
+}
+
+.cell-missing::after, .cell-misplaced::after {
+	content: '';
+	position: absolute;
+	top: 3px;
+	right: 3px;
+	width: 6px;
+	height: 6px;
+	border-radius: 50%;
+}
+
+.cell-missing::after {
+	background: var(--vscode-editorWarning-foreground, #cca700);
+}
+
+.cell-misplaced::after {
+	background: var(--vscode-editorInfo-foreground, #3794ff);
+}
+
+.cell-missing.cell-misplaced::after {
+	background: var(--vscode-editorError-foreground, #f14c4c);
 }
 
 #add-row-form {
@@ -148,10 +264,14 @@ td input:focus {
 	background: var(--vscode-input-background);
 	color: var(--vscode-input-foreground);
 	border: 1px solid var(--vscode-input-border, transparent);
+	border-radius: var(--radius-sm);
 	padding: 4px 6px;
 }
 
 .empty {
 	opacity: 0.7;
 	font-style: italic;
+	padding: 16px;
+	border: 1px dashed var(--vscode-panel-border);
+	border-radius: var(--radius);
 }

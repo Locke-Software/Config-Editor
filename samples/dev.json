@@ -1,8 +1,24 @@
 {
   "api": {
     "url": "https://dev.api.example.com",
-    "timeoutMs": 3000
+    "timeoutMs": 3000,
+    "retryCount": 2
   },
-  "logLevel": "debug",
-  "maxConnections": 5
+  "database": {
+    "host": "localhost",
+    "port": 5432,
+    "name": "app_dev"
+  },
+  "cache": {
+    "enabled": true,
+    "ttlSeconds": 30
+  },
+  "featureFlags": {
+    "newUi": true,
+    "betaSearch": true
+  },
+  "logging": {
+    "level": "debug",
+    "format": "pretty"
+  }
 }

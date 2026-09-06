@@ -1,8 +1,26 @@
 {
   "api": {
     "url": "https://api.example.com",
-    "timeoutMs": 5000
+    "timeoutMs": 5000,
+    "retryCount": 3
   },
-  "logLevel": "warn",
-  "maxConnections": 100
+  "database": {
+    "port": 5432,
+    "host": "prod-db.internal",
+    "name": "app_prod"
+  },
+  "cache": {
+    "enabled": true
+  },
+  "featureFlags": {
+    "newUi": false,
+    "betaSearch": false
+  },
+  "logging": {
+    "level": "warn",
+    "format": "json"
+  },
+  "cdn": {
+    "url": "https://cdn.example.com"
+  }
 }
