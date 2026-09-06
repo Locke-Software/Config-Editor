@@ -1,8 +1,18 @@
 {
   "name": "configeditor",
   "displayName": "ConfigEditor",
-  "description": "",
+  "description": "Edit multiple environment config files (.json, .yaml, .ini, .env) side-by-side in a single table view.",
   "version": "0.0.1",
+  "publisher": "LockeSoftware",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Locke-Software/Config-Editor.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Locke-Software/Config-Editor/issues"
+  },
+  "homepage": "https://github.com/Locke-Software/Config-Editor#readme",
   "engines": {
     "vscode": "^1.136.0"
   },
