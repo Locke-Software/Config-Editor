@@ -24,10 +24,6 @@
   "contributes": {
     "commands": [
       {
-        "command": "configeditor.helloWorld",
-        "title": "Hello World"
-      },
-      {
         "command": "configeditor.openConfigFiles",
         "title": "Open in Config Editor",
         "category": "Config Editor",
