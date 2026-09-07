@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
-import { ConfigEntries, ConfigFormat, detectFormat, parseConfig, serializeConfig } from './configParser';
+import { ConfigEntries, ConfigFormat, detectFormat, getConfigParser } from './parsers';
 import { readGitHeadContent } from './gitBaseline';
 
 interface FileState {
@@ -97,7 +97,7 @@ export class ConfigEditorPanel {
 			}
 			const format = detectFormat(uri);
 			const bytes = await vscode.workspace.fs.readFile(uri);
-			const entries = parseConfig(Buffer.from(bytes).toString('utf8'), format);
+			const entries = getConfigParser(format).parse(Buffer.from(bytes).toString('utf8'));
 			for (const key of entries.keys()) {
 				if (!this.keyOrder.includes(key)) {
 					this.keyOrder.push(key);
@@ -113,7 +113,7 @@ export class ConfigEditorPanel {
 	/** Fetches (or clears) the git HEAD snapshot used to detect uncommitted-but-saved changes. */
 	private async loadGitBaseline(file: FileState): Promise<void> {
 		const headText = await readGitHeadContent(file.uri);
-		file.gitEntries = headText !== undefined ? parseConfig(headText, file.format) : undefined;
+		file.gitEntries = headText !== undefined ? getConfigParser(file.format).parse(headText) : undefined;
 	}
 
 	private async refreshGitBaselines(): Promise<void> {
@@ -271,7 +271,7 @@ export class ConfigEditorPanel {
 		if (!file) {
 			return;
 		}
-		const text = serializeConfig(file.entries, file.format);
+		const text = getConfigParser(file.format).serialize(file.entries);
 		await vscode.workspace.fs.writeFile(file.uri, Buffer.from(text, 'utf8'));
 		file.savedEntries = new Map(file.entries);
 		file.dirty = false;
@@ -296,7 +296,7 @@ export class ConfigEditorPanel {
 
 		for (const file of this.files) {
 			const bytes = await vscode.workspace.fs.readFile(file.uri);
-			const entries = parseConfig(Buffer.from(bytes).toString('utf8'), file.format);
+			const entries = getConfigParser(file.format).parse(Buffer.from(bytes).toString('utf8'));
 			for (const key of entries.keys()) {
 				if (!this.keyOrder.includes(key)) {
 					this.keyOrder.push(key);
