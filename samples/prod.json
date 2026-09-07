@@ -26,5 +26,64 @@
   },
   "cdn": {
     "url": "https://cdn.example.com"
+  },
+  "server": {
+    "host": "0.0.0.0",
+    "port": 8080,
+    "workers": 8,
+    "requestTimeoutMs": 15000
+  },
+  "security": {
+    "corsAllowedOrigins": "https://app.example.com",
+    "jwtExpiryMinutes": 30,
+    "passwordMinLength": 10,
+    "mfaEnabled": true
+  },
+  "smtp": {
+    "host": "smtp.example.com",
+    "port": 587,
+    "username": "prod-mailer",
+    "useTls": true
+  },
+  "storage": {
+    "provider": "s3",
+    "bucket": "prod-uploads",
+    "region": "us-west-2"
+  },
+  "redis": {
+    "port": 6379,
+    "host": "prod-redis.internal",
+    "ttlSeconds": 600
+  },
+  "monitoring": {
+    "metricsEnabled": true,
+    "tracingSampleRate": 0.01,
+    "alertWebhookUrl": "https://hooks.example.com/alerts"
+  },
+  "queue": {
+    "workerConcurrency": 8,
+    "maxRetries": 5,
+    "visibilityTimeoutSeconds": 60
+  },
+  "pagination": {
+    "defaultPageSize": 20,
+    "maxPageSize": 100
+  },
+  "i18n": {
+    "defaultLocale": "en-US",
+    "supportedLocales": "en-US,fr-FR,es-ES,de-DE"
+  },
+  "throttling": {
+    "requestsPerMinute": 3000,
+    "burst": 200
+  },
+  "search": {
+    "provider": "opensearch",
+    "indexName": "prod_index",
+    "timeoutMs": 1500
+  },
+  "analytics": {
+    "enabled": true,
+    "writeKey": "prod-write-key"
   }
 }

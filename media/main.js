@@ -16,8 +16,15 @@
 	const defaultSettings = { rowStripes: false, colStripes: false, rowHover: false, colHover: false };
 	const settings = { ...defaultSettings, ...(persisted.settings ?? {}) };
 
+	// Column widths, keyed by file uri ('__key__' for the label column), persisted across reloads.
+	const KEY_COLUMN_KEY = '__key__';
+	const KEY_COLUMN_DEFAULT_WIDTH = 200;
+	const FILE_COLUMN_DEFAULT_WIDTH = 220;
+	const MIN_COLUMN_WIDTH = 80;
+	const columnWidths = { ...(persisted.columnWidths ?? {}) };
+
 	function persist() {
-		vscode.setState({ collapsed: [...collapsedPaths], settings });
+		vscode.setState({ collapsed: [...collapsedPaths], settings, columnWidths });
 	}
 
 	window.addEventListener('message', event => {
@@ -169,6 +176,7 @@
 		}
 
 		const table = document.createElement('table');
+		table.appendChild(buildColGroup());
 		table.appendChild(buildHeader());
 		table.appendChild(buildBody());
 
@@ -176,15 +184,133 @@
 		wrapper.className = 'table-wrapper';
 		wrapper.appendChild(table);
 
-		container.appendChild(wrapper);
+		const rulerHost = document.createElement('div');
+		rulerHost.className = 'scroll-ruler-host';
+		rulerHost.appendChild(wrapper);
+		const ruler = document.createElement('div');
+		ruler.className = 'scroll-ruler';
+		rulerHost.appendChild(ruler);
+
+		container.appendChild(rulerHost);
 		container.appendChild(buildAddRowForm());
+
+		updateScrollRuler();
+	}
+
+	/**
+	 * Mirrors VS Code's editor overview ruler: one small tick per flagged row,
+	 * positioned proportionally to that row's place in the full (not just
+	 * visible) table height, so it maps onto the scrollbar's whole range.
+	 */
+	function updateScrollRuler() {
+		const wrapper = container.querySelector('.table-wrapper');
+		const ruler = container.querySelector('.scroll-ruler');
+		const table = wrapper?.querySelector('table');
+		if (!wrapper || !ruler || !table) {
+			return;
+		}
+
+		ruler.innerHTML = '';
+		const totalHeight = table.offsetHeight;
+		if (totalHeight === 0) {
+			return;
+		}
+
+		for (const row of table.querySelectorAll('tbody tr')) {
+			const severity = rowSeverity(row);
+			if (!severity) {
+				continue;
+			}
+			const tick = document.createElement('div');
+			tick.className = `ruler-tick ruler-tick-${severity}`;
+			tick.style.top = `${(row.offsetTop / totalHeight) * 100}%`;
+			tick.title = RULER_SEVERITY_LABELS[severity];
+			tick.addEventListener('click', () => {
+				wrapper.scrollTop = row.offsetTop - (wrapper.clientHeight - row.offsetHeight) / 2;
+			});
+			ruler.appendChild(tick);
+		}
+	}
+
+	const RULER_SEVERITY_LABELS = {
+		error: 'Missing and in a different position in this row',
+		warning: 'Missing from a file in this row',
+		info: 'In a different position in this row',
+		unsaved: 'Unsaved changes in this row',
+		uncommitted: 'Uncommitted changes in this row'
+	};
+
+	/** Worst-to-least-severe: a row only gets one tick even if multiple cells/issues apply. */
+	function rowSeverity(row) {
+		if (row.querySelector('.cell-missing.cell-misplaced')) { return 'error'; }
+		if (row.querySelector('.cell-missing')) { return 'warning'; }
+		if (row.querySelector('.cell-misplaced')) { return 'info'; }
+		if (row.querySelector('.cell-unsaved')) { return 'unsaved'; }
+		if (row.querySelector('.cell-uncommitted')) { return 'uncommitted'; }
+		return null;
+	}
+
+	function buildColGroup() {
+		const colgroup = document.createElement('colgroup');
+		colgroup.appendChild(buildCol(KEY_COLUMN_KEY, KEY_COLUMN_DEFAULT_WIDTH));
+		for (const file of state.files) {
+			colgroup.appendChild(buildCol(file.uri, FILE_COLUMN_DEFAULT_WIDTH));
+		}
+		return colgroup;
+	}
+
+	function buildCol(columnKey, defaultWidth) {
+		const col = document.createElement('col');
+		col.dataset.columnKey = columnKey;
+		col.style.width = `${columnWidths[columnKey] ?? defaultWidth}px`;
+		return col;
+	}
+
+	function getColElement(columnKey) {
+		const table = container.querySelector('table');
+		return table?.querySelector(`col[data-column-key="${cssEscape(columnKey)}"]`) ?? null;
+	}
+
+	/** Adds a draggable resize handle to a header cell's right edge; columnKey matches a <col>'s dataset.columnKey. */
+	function addResizeHandle(th, columnKey) {
+		const handle = document.createElement('div');
+		handle.className = 'col-resize-handle';
+		th.appendChild(handle);
+
+		handle.addEventListener('mousedown', event => {
+			event.preventDefault();
+			event.stopPropagation();
+
+			const startX = event.clientX;
+			const startWidth = columnWidths[columnKey] ?? th.getBoundingClientRect().width;
+			const col = getColElement(columnKey);
+			document.body.classList.add('resizing-column');
+
+			const onMouseMove = moveEvent => {
+				const width = Math.max(MIN_COLUMN_WIDTH, startWidth + (moveEvent.clientX - startX));
+				columnWidths[columnKey] = width;
+				if (col) {
+					col.style.width = `${width}px`;
+				}
+			};
+			const onMouseUp = () => {
+				document.removeEventListener('mousemove', onMouseMove);
+				document.removeEventListener('mouseup', onMouseUp);
+				document.body.classList.remove('resizing-column');
+				persist();
+			};
+			document.addEventListener('mousemove', onMouseMove);
+			document.addEventListener('mouseup', onMouseUp);
+		});
 	}
 
 	function buildHeader() {
 		const thead = document.createElement('thead');
 		const tr = document.createElement('tr');
 
-		tr.appendChild(cloneTemplate('tpl-key-header').firstElementChild);
+		const keyTh = cloneTemplate('tpl-key-header').firstElementChild;
+		addResizeHandle(keyTh, KEY_COLUMN_KEY);
+		tr.appendChild(keyTh);
 
 		for (const file of state.files) {
 			const th = cloneTemplate('tpl-file-header').firstElementChild;
@@ -209,6 +335,7 @@
 				]);
 			});
 
+			addResizeHandle(th, file.uri);
 			tr.appendChild(th);
 		}
 
@@ -357,6 +484,7 @@
 		const td = input?.closest('td');
 		if (td) {
 			applyCellAnnotations(td, node, uri);
+			updateScrollRuler();
 		}
 	}
 

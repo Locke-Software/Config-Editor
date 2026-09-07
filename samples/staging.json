@@ -27,5 +27,63 @@
   },
   "cdn": {
     "url": "ffff"
+  },
+  "server": {
+    "host": "0.0.0.0",
+    "port": 8080,
+    "workers": 4,
+    "requestTimeoutMs": 30000
+  },
+  "security": {
+    "corsAllowedOrigins": "https://staging.example.com",
+    "jwtExpiryMinutes": 60,
+    "passwordMinLength": 8,
+    "mfaEnabled": true
+  },
+  "smtp": {
+    "host": "smtp.staging.example.com",
+    "port": 587,
+    "username": "staging-mailer",
+    "useTls": true
+  },
+  "storage": {
+    "provider": "s3",
+    "bucket": "staging-uploads",
+    "region": "us-east-1"
+  },
+  "redis": {
+    "host": "staging-redis.internal",
+    "port": 6379,
+    "ttlSeconds": 300
+  },
+  "monitoring": {
+    "metricsEnabled": true,
+    "tracingSampleRate": 0.25
+  },
+  "queue": {
+    "workerConcurrency": 4,
+    "maxRetries": 3,
+    "visibilityTimeoutSeconds": 30
+  },
+  "pagination": {
+    "defaultPageSize": 20,
+    "maxPageSize": 100
+  },
+  "i18n": {
+    "defaultLocale": "en-US",
+    "supportedLocales": "en-US,fr-FR"
+  },
+  "throttling": {
+    "requestsPerMinute": 1200,
+    "burst": 100
+  },
+  "search": {
+    "provider": "opensearch",
+    "indexName": "staging_index",
+    "timeoutMs": 2000
+  },
+  "analytics": {
+    "enabled": true,
+    "writeKey": "staging-write-key"
   }
 }

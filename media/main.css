@@ -3,6 +3,13 @@
 	--radius-sm: 4px;
 }
 
+/* Without this, elements with both a border and a percentage/flex-based size
+   (e.g. .table-wrapper) render a couple pixels wider than intended, which was
+   enough to trigger a permanent, unnecessary horizontal scrollbar. */
+*, *::before, *::after {
+	box-sizing: border-box;
+}
+
 body {
 	font-family: var(--vscode-font-family);
 	color: var(--vscode-foreground);
@@ -94,6 +101,10 @@ table {
 	   each cell's own box, so they stick together with it correctly. */
 	border-collapse: separate;
 	border-spacing: 0;
+	/* fixed: column widths come strictly from the <colgroup>, which is what
+	   makes user-driven resizing (main.js) actually stick regardless of cell
+	   content width. */
+	table-layout: fixed;
 	width: 100%;
 }
 
@@ -102,6 +113,50 @@ table {
 	min-height: 0; /* let this shrink below its content size so the table-wrapper's flex-basis actually constrains it */
 	display: flex;
 	flex-direction: column;
+}
+
+.scroll-ruler-host {
+	flex: 1 1 auto;
+	min-height: 0;
+	display: flex;
+}
+
+/* A thin "overview ruler" track next to the scrollbar, one tick per flagged
+   row - mirrors how VS Code marks errors/warnings alongside the editor's own
+   scrollbar. Positioned as a sibling column rather than overlaid on the real
+   scrollbar, since browsers don't expose the native scrollbar to style precisely. */
+.scroll-ruler {
+	position: relative;
+	flex: 0 0 10px;
+}
+
+.ruler-tick {
+	position: absolute;
+	left: 2px;
+	right: 2px;
+	height: 3px;
+	border-radius: 1px;
+	cursor: pointer;
+}
+
+.ruler-tick-warning {
+	background: var(--vscode-editorWarning-foreground, #cca700);
+}
+
+.ruler-tick-info {
+	background: var(--vscode-editorInfo-foreground, #3794ff);
+}
+
+.ruler-tick-error {
+	background: var(--vscode-editorError-foreground, #f14c4c);
+}
+
+.ruler-tick-unsaved {
+	background: var(--vscode-descriptionForeground, #8c8c8c);
+}
+
+.ruler-tick-uncommitted {
+	background: #6cb6ff;
 }
 
 /* A bordered, rounded "panel" for the table. It scrolls internally (rather
@@ -113,6 +168,7 @@ table {
 	border-radius: var(--radius);
 	overflow: auto;
 	flex: 1 1 auto;
+	min-width: 0;
 	min-height: 0;
 }
 
@@ -151,7 +207,6 @@ th.key-column, td.key-column {
 	left: 0;
 	z-index: 1;
 	background: var(--vscode-editor-background);
-	min-width: 160px;
 	font-weight: 600;
 	border-right: 1px solid var(--vscode-panel-border);
 }
@@ -167,6 +222,32 @@ td.key-column {
 	font-weight: normal;
 }
 
+/* Column resize handle: a thin invisible strip over the header cell's right
+   edge; main.js drags it to update that column's <col> width. thead th is
+   already position: sticky, which also serves as the anchor for this. */
+.col-resize-handle {
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	right: -3px;
+	width: 6px;
+	cursor: col-resize;
+	z-index: 3;
+}
+
+.col-resize-handle:hover {
+	background: var(--vscode-focusBorder);
+	opacity: 0.5;
+}
+
+body.resizing-column {
+	cursor: col-resize;
+}
+
+body.resizing-column, body.resizing-column * {
+	user-select: none;
+}
+
 /* Flex layout lives on this inner wrapper, not on th/td directly, so the
    cells keep their table-cell display and stay aligned as table columns. */
 .cell-content {
@@ -174,6 +255,13 @@ td.key-column {
 	align-items: center;
 	justify-content: space-between;
 	gap: 8px;
+	min-width: 0; /* let flex children actually shrink/truncate when a column is resized narrow */
+}
+
+.file-name, .section-name, .key-name {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 }
 
 .file-name {
@@ -184,6 +272,7 @@ td.key-column {
 	display: flex;
 	align-items: center;
 	gap: 4px;
+	min-width: 0;
 }
 
 .dirty-dot {

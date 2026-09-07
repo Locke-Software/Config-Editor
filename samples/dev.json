@@ -24,5 +24,64 @@
   "logging": {
     "level": "debug",
     "format": "pretty"
+  },
+  "server": {
+    "host": "0.0.0.0",
+    "port": 8080,
+    "workers": 2,
+    "requestTimeoutMs": 30000
+  },
+  "security": {
+    "corsAllowedOrigins": "*",
+    "jwtExpiryMinutes": 60,
+    "passwordMinLength": 8,
+    "mfaEnabled": false
+  },
+  "smtp": {
+    "host": "smtp.mailtrap.io",
+    "port": 2525,
+    "username": "dev-mailer",
+    "useTls": false
+  },
+  "storage": {
+    "provider": "local",
+    "bucket": "dev-uploads",
+    "region": "us-east-1"
+  },
+  "redis": {
+    "host": "localhost",
+    "port": 6379,
+    "ttlSeconds": 300
+  },
+  "monitoring": {
+    "metricsEnabled": false,
+    "tracingSampleRate": 0.1,
+    "alertWebhookUrl": ""
+  },
+  "queue": {
+    "workerConcurrency": 2,
+    "maxRetries": 3,
+    "visibilityTimeoutSeconds": 30
+  },
+  "pagination": {
+    "defaultPageSize": 20,
+    "maxPageSize": 100
+  },
+  "i18n": {
+    "defaultLocale": "en-US",
+    "supportedLocales": "en-US,fr-FR"
+  },
+  "throttling": {
+    "requestsPerMinute": 600,
+    "burst": 50
+  },
+  "search": {
+    "provider": "local",
+    "indexName": "dev_index",
+    "timeoutMs": 2000
+  },
+  "analytics": {
+    "enabled": false,
+    "writeKey": ""
   }
 }
